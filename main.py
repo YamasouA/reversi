@@ -14,7 +14,7 @@ mx, my = 0, 0
 #クリックしたときに1を代入する変数
 mc = 0
 #ゲーム進行を管理
-proc = 0
+proc = -1
 #どちらの順番かを管理
 turn = 0
 #メッセージ表示用の変数
@@ -23,12 +23,41 @@ msg = ""
 #空いてるマスの数
 space = 0
 #プレーヤーとコンピュータの石の色
-color = [0] * 2
+color = [0, 0]
 who = ["あなた", "コンピュータ"]
+lv = 0
 
 board = []
+# 局面を保存する
+back = []
 for y in range(8):
     board.append([0, 0, 0, 0, 0, 0, 0, 0])
+    back.append([0, 0, 0, 0, 0, 0, 0, 0])
+
+
+priority = [
+	[6, 2, 5, 4, 4, 5, 2, 6],
+	[2, 1, 3, 3, 3, 3, 1, 2],
+	[5, 3, 3, 3, 3, 3, 3, 5],
+	[4, 3, 3, 0, 0, 3, 3, 4],
+	[4, 3, 3, 0, 0, 3, 3, 4],
+	[5, 3, 3, 3, 3, 3, 3, 5],
+	[2, 1, 3, 3, 3, 3, 1, 2],
+	[6, 2, 5, 4, 4, 5, 2, 6]
+]
+
+def computer_1(iro):
+	sx = 0
+	sy = 0
+	p = 0
+	for y in range(len(priority[0])):
+		for x in range(len(priority[1])):
+			if kaeseru(x, y, iro) > 0 and priority[y][x] > p:
+				p = priority[y][x]
+				sx = x
+				sy = y
+	return sx, sy
+
 
 #盤面をクリックしたときに動く関数
 def click(e):
@@ -146,6 +175,61 @@ def ishino_kazu():
             if board[y][x] == WHITE: w += 1
     return b, w
 
+# モンテカルロ法による思考ルーチン
+def save():
+	for y in range(len(board[0])):
+		for x in range(len(board[1])):
+			back[y][x] = board[y][x]
+
+def load():
+	for y in range(len(board[0])):
+		for x in range(len(board[1])):
+			board[y][x] = back[y][x]
+
+def uchiau(iro):
+	while True:
+		print("uchiau now")
+		if uteru_masu(BLACK) == False and uteru_masu(WHITE) == False:
+			break
+		iro = 3 - iro
+		if uteru_masu(iro) == True:
+			while True:
+				x = random.randint(0, 7)
+				y = random.randint(0, 7)
+				if kaeseru(x, y, iro) > 0:
+					ishi_utsu(x, y, iro)
+					break
+def computer_2(iro, loops):
+	global msg
+	win = [0] * 64
+	save()
+
+	for y in range(len(board[0])):
+		for x in range(len(board[1])):
+			if kaeseru(x, y, iro) > 0:
+				msg += "."
+				banmen()
+				win[x+y*8] = 1
+				for i in range(loops):
+					ishi_utsu(x, y, iro)
+					uchiau(iro)
+					b, w = ishino_kazu()
+					if iro == BLACK and b > w:
+						win[x+y*8] += 1
+					if iro == WHITE and w > b:
+						win[x+y*8] += 1
+					load()
+	m = 0
+	n = 0
+	for i in range(64):
+		if win[i] > m:
+			m = win[i]
+			n = i
+	x = n % 8
+	y = int(n / 8)
+	return x, y
+
+
 #コンピュータの思考ルーチン
 def computer_0(iro): 
     #ランダムに打つ
@@ -156,11 +240,28 @@ def computer_0(iro):
             return rx, ry
 
 def main():
-    global mc, proc, turn, msg, space, color
+    global mc, proc, turn, msg, space, color, lv
     banmen()
+    if proc == -1:
+        cvs.create_text(320, 200, text="Reversi", fill="gold", font=FL)
+        msg = "レベルを選択"
+        cvs.create_text(80, 440, text="Lv. 1", fill="lime", font=FS)
+        cvs.create_text(320, 440, text="Lv. 2", fill="lime", font=FS)
+        cvs.create_text(560, 440, text="Lv. 3", fill="lime", font=FS)
+        if mc == 1: #ウィンドウをクリック
+            mc = 0
+            #先手の文字をクリックしたら
+            if (mx== 0 or mx== 1) and my == 5:
+                lv = 1
+            if (mx== 3 or mx== 4) and my == 5:
+                lv = 2
+            if (mx== 6 or mx== 7) and my == 5:
+                lv = 3
+            print("lv: ", lv)
+            proc = 0
+
     if proc == 0: #タイトル画面
         msg = "先手、後手を選択"
-        cvs.create_text(320, 200, text="Reversi", fill="gold", font=FL)
         cvs.create_text(160, 440, text="先手(黒)", fill="lime", font=FS)
         cvs.create_text(480, 440, text="後手(白)", fill="lime", font=FS)
         if mc == 1: #ウィンドウをクリック
@@ -199,7 +300,14 @@ def main():
                     #print('c')
             #print('play')
         else: #コンピュータ
-            cx, cy = computer_0(color[turn])
+            if lv == 1:
+                cx, cy = computer_0(color[turn])
+            elif lv == 2:
+                cx, cy = computer_1(color[turn])
+            elif lv == 3:
+                MONTE = [300, 300, 240, 180, 120, 60, 1]
+                # 空いているますの数に応じてモンテカルロで計算する回数を減らす
+                cx, cy = computer_2(color[turn], MONTE[int(space/10)])
             ishi_utsu(cx, cy, color[turn])
             proc = 3
             space -= 1
@@ -230,14 +338,15 @@ def main():
             tkinter.messagebox.showinfo("", "コンピュータの勝利")
         else:
             tkinter.messagebox.showinfo("", "引き分け")
-        proc = 0
+        proc = -1 
     root.after(100, main)
 
 root = tkinter.Tk()
 root.title("リバーシ")
 root.resizable(False, False)
 root.bind("<Button>", click)
-cvs = tkinter.Canvas(width=640, height=700, bg="green")
+#cvs = tkinter.Canvas(width=640, height=700, bg="green")
+cvs = tkinter.Canvas(width=1000, height=1000, bg="green")
 cvs.pack()
 root.after(100, main)
 root.mainloop()
